@@ -1,0 +1,121 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Description: AWS API Gateway with a Lambda Integration
+
+Resources:
+#Create a ApiGateway::RestApi resource
+  ApiGatewayRestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      ApiKeySourceType: HEADER
+      Description: An API Gateway with a Lambda Integration
+      EndpointConfiguration:
+        Types:
+          - POC
+      Name: lambda-api
+#Step 2: Create a ApiGateway::Resource resource
+  ApiGatewayResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt ApiGatewayRestApi.RootResourceId
+      PathPart: 'lambda'
+      RestApiId: !Ref ApiGatewayRestApi
+#Step 3: Create a AWS::ApiGateway::Method resource
+  ApiGatewayMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      ApiKeyRequired: false
+      AuthorizationType: NONE
+      HttpMethod: GET
+      Integration:
+        #ConnectionType: INTERNET
+        #Credentials: !GetAtt ApiGatewayIamRole.Arn
+        IntegrationHttpMethod: GET
+        #PassthroughBehavior: WHEN_NO_MATCH
+        #TimeoutInMillis: 29000
+        Type: AWS_PROXY
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunction.Arn}/invocations'
+      OperationName: 'lambda'
+      ResourceId: !Ref ApiGatewayResource
+      RestApiId: !Ref ApiGatewayRestApi
+#Step 4: Create a AWS::ApiGateway::Model resource
+  ApiGatewayModel:
+    Type: AWS::ApiGateway::Model
+    Properties:
+      ContentType: 'application/json'
+      RestApiId: !Ref ApiGatewayRestApi
+      Schema: {}
+#Step 5: Create a AWS::ApiGateway::Stage resource
+  ApiGatewayStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      DeploymentId: !Ref ApiGatewayDeployment
+      Description: Lambda API Stage v0
+      RestApiId: !Ref ApiGatewayRestApi
+      StageName: 'v0'
+#Step 6: Create a AWS::ApiGateway::Deployment resource
+  ApiGatewayDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: ApiGatewayMethod
+    Properties:
+      Description: Lambda API Deployment
+      RestApiId: !Ref ApiGatewayRestApi
+#Step 7: Create a AWS::IAM::Role resource for the API Gateway
+  ApiGatewayIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ''
+            Effect: 'Allow'
+            Principal:
+              Service:
+                - 'apigateway.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Path: '/'
+      Policies:
+        - PolicyName: LambdaAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action: 'lambda:*'
+                Resource: !GetAtt LambdaFunction.Arn
+#Step 8: Create an AWS Lambda function
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          def handler(event, context):
+            response = {
+              'isBase64Encoded': False,
+              'statusCode': 200,
+              'headers': {},
+              'multiValueHeaders': {},
+              'body': 'POC for Serverless deployement Stage 1!'
+            }
+            return response          
+      Description: AWS Lambda function
+      FunctionName: 'lambda-function'
+      Handler: index.handler
+      MemorySize: 256
+      Role: !GetAtt LambdaIamRole.Arn
+      Runtime: python3.7
+      Timeout: 60
+#Step 9: Create a AWS::IAM::Role resource for the Lambda function
+  LambdaIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: 'Allow'
+            Principal:
+              Service:
+                - 'lambda.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Path: '/'
